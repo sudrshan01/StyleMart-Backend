@@ -42,4 +42,12 @@ aws:
 2️⃣ Build and Run Containers
 docker-compose up -d --build
 
- run this cmd for check conteainer  are run or not docker ps 
+ run this cmd for check conteainer  are run or not docker ps
+
+
+👨‍💻 Author
+
+Sudrshan Genure
+Bachelor of Computer Science (B.Sc. - ECS)
+🎓 Dr. Ganpatrao Deshmukh Mahavidyalaya, Sangola
+🔗 GitHub Profile
