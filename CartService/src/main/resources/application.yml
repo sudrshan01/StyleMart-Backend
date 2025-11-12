@@ -1,0 +1,59 @@
+server:
+  port: 8084
+
+spring:
+  application:
+    name: cart-service
+
+  datasource:
+    url: jdbc:mysql://mysql:3306/ecomdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: root
+    password: "@Sudrshan01"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+  redis:
+    host: redis              # ✅ container name (matches docker-compose)
+    port: 6379
+    password: redispass      # ✅ same as docker-compose
+    timeout: 10000
+    client-type: lettuce
+    lettuce:
+      pool:
+        max-active: 10
+        max-idle: 5
+        min-idle: 1
+        max-wait: -1
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: 5000
+            readTimeout: 5000
+eureka:
+  client:
+    register-with-eureka: true       # ✅ ensures the service registers itself
+    fetch-registry: true             # ✅ allows it to discover other services
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/  # ✅ internal Docker host
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${server.port}
+
+logging:
+  level:
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG
+feign:
+  circuitbreaker:
+    enabled: true
+
+ribbon:
+  eager-load:
+    enabled: true
+    clients: user-service, product-service

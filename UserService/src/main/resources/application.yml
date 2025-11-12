@@ -1,0 +1,65 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: user-service
+
+  datasource:
+    url: jdbc:mysql://mysql:3306/ecomdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: root
+    password: "@Sudrshan01"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect   # ✅ use MySQL8Dialect for MySQL 8.0
+
+  kafka:
+    bootstrap-servers: kafka:9092                     # ✅ Docker container hostname
+
+    listener:
+      missing-topics-fatal: false
+
+    consumer:
+      group-id: user-service
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.value.default.type: com.styleMart.user.event.OrderEvent
+        reconnect.backoff.ms: 1000
+        reconnect.backoff.max.ms: 10000
+
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      properties:
+        spring.json.add.type.headers: false            # ✅ ensures cross-service JSON compatibility
+
+  redis:
+    host: redis                                       # ✅ container name, not localhost
+    port: 6379
+    password: redispass                               # ✅ same as in docker-compose
+    timeout: 60000
+    connect-timeout: 2000
+
+eureka:
+  client:
+    register-with-eureka: true
+    fetch-registry: true
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/  # ✅ internal container name
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${server.port}
+
+logging:
+  level:
+    org.springframework.web: INFO
+    org.hibernate.SQL: DEBUG

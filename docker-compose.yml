@@ -1,0 +1,301 @@
+version: '3.9'
+
+services:
+  # 🐬 MySQL
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: "@Sudrshan01"
+      MYSQL_DATABASE: ecomdb
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p@Sudrshan01"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # 🔴 Redis
+  redis:
+    image: redis:7.2
+    container_name: redis
+    restart: always
+    command: ["redis-server", "--requirepass", "redispass"]
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redispass", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # 🦋 Zookeeper
+  zookeeper:
+    image: wurstmeister/zookeeper
+    container_name: zookeeper
+    restart: always
+    ports:
+      - "2181:2181"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc localhost 2181 | grep imok"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  # 🐦 Kafka
+  kafka:
+    image: wurstmeister/kafka
+    container_name: kafka
+    restart: always
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # 🟦 Eureka Server
+  eureka-server:
+    build:
+      context: ./EurekaServerService
+      dockerfile: Dockerfile
+    container_name: eureka-server
+    restart: always
+    ports:
+      - "8761:8761"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+
+  # 🟧 API Gateway
+  api-gateway:
+    build:
+      context: ./APIGatewayService
+      dockerfile: Dockerfile
+    container_name: api-gateway
+    restart: always
+    depends_on:
+      eureka-server:
+        condition: service_started
+    ports:
+      - "8080:8080"
+    environment:
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    networks:
+      - app-network
+    command: >
+      sh -c "sleep 20 && java -jar /app/app.jar"
+
+  # 🛍️ Product Service
+  product-service:
+    build:
+      context: ./ProductService
+      dockerfile: Dockerfile
+    container_name: product-service
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_APPLICATION_NAME: product-service
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ecomdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: "@Sudrshan01"
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: redispass
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    networks:
+      - app-network
+    command: >
+      sh -c "sleep 25 && java -jar /app/app.jar"
+
+  # 🧍 User Service
+  user-service:
+    build:
+      context: ./UserService
+      dockerfile: Dockerfile
+    container_name: user-service
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_APPLICATION_NAME: user-service
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ecomdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: "@Sudrshan01"
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: redispass
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    networks:
+      - app-network
+    command: >
+      sh -c "sleep 25 && java -jar /app/app.jar"
+
+  # 🧾 Order Service
+  order-service:
+    build:
+      context: ./OrdersService
+      dockerfile: Dockerfile
+    container_name: order-service
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_APPLICATION_NAME: order-service
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ecomdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: "@Sudrshan01"
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: redispass
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    networks:
+      - app-network
+    command: >
+      sh -c "sleep 25 && java -jar /app/app.jar"
+
+  # 🧩 Review Service
+  review-service:
+    build:
+      context: ./ReviewService
+      dockerfile: Dockerfile
+    container_name: review-service
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_APPLICATION_NAME: review-service
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ecomdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: "@Sudrshan01"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    networks:
+      - app-network
+    command: >
+      sh -c "sleep 25 && java -jar /app/app.jar"
+
+  # 🛒 Cart Service
+  cart-service:
+    build:
+      context: ./CartService
+      dockerfile: Dockerfile
+    container_name: cart-service
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_APPLICATION_NAME: cart-service
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ecomdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: "@Sudrshan01"
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_REDIS_PASSWORD: redispass
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    networks:
+      - app-network
+    command: >
+      sh -c "sleep 25 && java -jar /app/app.jar"
+
+  # 🔔 Notification Service
+  notification-service:
+    build:
+      context: ./NotificationService
+      dockerfile: Dockerfile
+    container_name: notification-service
+    restart: always
+    depends_on:
+      mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      eureka-server:
+        condition: service_started
+    ports:
+      - "8086:8086"
+    environment:
+      SPRING_APPLICATION_NAME: notification-service
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ecomdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: "@Sudrshan01"
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    networks:
+      - app-network
+    command: >
+      sh -c "sleep 25 && java -jar /app/app.jar"
+
+# 🌐 Shared Network
+networks:
+  app-network:
+    driver: bridge
+
+# 💾 Persistent Volume
+volumes:
+  mysql_data:
